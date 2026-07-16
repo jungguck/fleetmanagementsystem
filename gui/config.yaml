@@ -1,0 +1,28 @@
+# ═══════════════════════════════════════════════════════════════════
+# FMS 관제 GUI 설정
+#   - 로봇 목록·스테이션·소스를 여기서 정의(코드 수정 없이 대수 확장).
+#   - plc_study_for_me/config.yaml 의 robots 리스트 패턴을 그대로 차용.
+# ═══════════════════════════════════════════════════════════════════
+
+# 화면 갱신 주기(초). plc_study 의 poll_interval_sec 과 동일 개념.
+poll_interval_sec: 0.5
+
+# 데이터 소스:
+#   mock = ROS 없이 가짜 데이터로 GUI 단독 실행(지금 이 골격의 기본)
+#   ros  = 실제 ROS2 브릿지(rclpy)로 /tbN 상태 구독 — P1+ 에서 구현(state.py TODO)
+source: mock
+
+# 관제할 로봇(=지게차) 목록. 대수 늘리려면 항목만 추가하면 됨(코드 무관).
+#   현재 4대. 8대로 늘리려면 tb5~tb8 을 그냥 아래에 추가.
+robots:
+  - {id: tb1, name: TB-1}
+  - {id: tb2, name: TB-2}
+  - {id: tb3, name: TB-3}
+  - {id: tb4, name: TB-4}
+
+# 스테이션(픽업/드롭/충전) — 맵 좌표. 맵뷰(P1+)에서 표시.
+#   ⚠ 좌표는 예시. 실제 맵(SLAM 저장맵) 기준으로 확인 필요.
+stations:
+  - {name: PICK-A, x: 1.0, y: 1.0, kind: pickup}
+  - {name: DROP-B, x: 4.0, y: 3.0, kind: drop}
+  - {name: CHARGE, x: 0.0, y: 0.0, kind: charge}
