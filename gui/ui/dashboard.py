@@ -9,6 +9,7 @@ plc_study_for_me/app/ui/{dashboard,components}.py 의 robot_card·요약 패턴 
 from nicegui import ui
 
 from gui.state import STATE_COLORS, FleetState, RobotState
+from gui.ui import mapview   # 좌측 맵뷰(로봇 위치·스테이션)
 
 
 def robot_card(r: RobotState) -> None:
@@ -49,9 +50,12 @@ def dashboard_body(state: FleetState) -> None:
         f"소스: {state.source_name}"
     ).classes("text-lg font-bold mb-2")
 
-    # (예정) 여기 왼쪽에 맵뷰(로봇 위치·경로·스테이션 표시) — P1+ 에서 추가
-
-    # ── 로봇 카드 그리드 (대수만큼 순회 — plc_study 의 for r in snap.robots 패턴) ──
-    with ui.row().classes("flex-wrap gap-3"):
-        for r in state.robots:
-            robot_card(r)
+    # ── 본문: 왼쪽 맵뷰 + 오른쪽 로봇 카드 (GUI_설계.md 배치) ──
+    with ui.row().classes("w-full gap-4 items-start"):
+        # 왼쪽: 맵뷰 (로봇 위치·스테이션을 2D 평면에)
+        mapview.map_view(state)
+        # 오른쪽: 로봇 카드 그리드 (대수만큼 순회 — plc_study for r in snap.robots 패턴)
+        with ui.column().classes("flex-1"):
+            with ui.row().classes("flex-wrap gap-3"):
+                for r in state.robots:
+                    robot_card(r)
