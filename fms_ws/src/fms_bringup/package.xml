@@ -1,0 +1,23 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>fms_bringup</name>
+  <version>0.0.1</version>
+  <description>FMS TurtleBot Fleet — bringup launch (P0-3 시뮬, P0-4 nav2). ROS 2 distro 무관(humble/jazzy).</description>
+  <maintainer email="imguck1684@gmail.com">jungguck</maintainer>
+  <license>MIT</license>
+
+  <exec_depend>turtlebot3_gazebo</exec_depend>
+  <exec_depend>nav2_bringup</exec_depend>
+  <exec_depend>navigation2</exec_depend>
+  <exec_depend>slam_toolbox</exec_depend>
+  <exec_depend>robot_state_publisher</exec_depend>
+
+  <test_depend>ament_copyright</test_depend>
+  <test_depend>ament_flake8</test_depend>
+  <test_depend>ament_pep257</test_depend>
+
+  <export>
+    <build_type>ament_python</build_type>
+  </export>
+</package>
