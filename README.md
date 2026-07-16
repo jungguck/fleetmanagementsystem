@@ -3,7 +3,7 @@
 > TurtleBot 여러 대를 **지게차(AGV/AMR)** 로 보고, GUI 관제시스템에서 "어디로 가서 무엇을 옮겨라"를 지시·조율하는 **Fleet Management System(FMS)**.
 > **현재 상태: 계획 단계(개념·아키텍처 확정, 미구현).**
 
-- **타깃**: ROS 2 **Humble** (⚠ 개발 머신은 Jazzy/Ubuntu 24.04 → **Docker Humble** 또는 별도 22.04 머신 필요)
+- **타깃**: ROS 2 — **OS에 맞는 distro 네이티브** (Ubuntu 22.04→**Humble** / 24.04→**Jazzy**). 이 머신 = 24.04 → **Jazzy 네이티브**(Docker 불필요). 상세 `docs/환경.md`.
 - **문서 성격**: 프로젝트 착수 전 개념·아키텍처·로드맵·난제 정리
 
 ---
