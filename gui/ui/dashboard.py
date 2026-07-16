@@ -10,6 +10,7 @@ from nicegui import ui
 
 from gui.state import STATE_COLORS, FleetState, RobotState
 from gui.ui import mapview   # 좌측 맵뷰(로봇 위치·스테이션)
+from gui.ui import tasks     # 하단 작업 큐
 
 
 def robot_card(r: RobotState) -> None:
@@ -59,3 +60,6 @@ def dashboard_body(state: FleetState) -> None:
             with ui.row().classes("flex-wrap gap-3"):
                 for r in state.robots:
                     robot_card(r)
+
+    # ── 하단: 작업 큐 현황 (생성 폼은 페이지에서 별도 렌더 — tasks.py 공부포인트 참고) ──
+    tasks.task_queue(state)

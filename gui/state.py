@@ -37,6 +37,19 @@ class RobotState:
     yaw: float = 0.0        # 방향 (rad)
 
 
+# ─────────────────────────────────────────────────────────────────────
+# 작업(Task): "픽업 스테이션 → 드롭 스테이션" 배송 1건
+#   운영자가 GUI 에서 만들면 pending 으로 큐에 쌓이고, 배차기가 idle 로봇에 할당.
+# ─────────────────────────────────────────────────────────────────────
+@dataclass
+class Task:
+    id: int
+    pickup: str               # 픽업 스테이션 이름
+    drop: str                 # 드롭 스테이션 이름
+    state: str = "pending"    # pending(대기) / running(수행중) / done(완료)
+    robot: str | None = None  # 배차된 로봇 id
+
+
 # 상태 → 색. GUI_설계.md 의 색 규칙과 공유(대시보드·맵뷰 공통).
 STATE_COLORS = {
     "idle":      "#9aa7b0",  # 회색 : 대기
@@ -69,11 +82,9 @@ class MockFleetSource:
                 r.battery = min(100.0, r.battery + 1.0)
                 if r.battery > 95:
                     r.state, r.task = "idle", "-"
-            elif r.state == "idle" and random.random() < 0.1:
-                # 대기중이면 가끔 새 배송 작업 시작
-                r.state, r.task = "driving", "PICK-A→DROP-B"
             elif r.state == "driving":
-                # 주행중이면 위치가 조금씩 이동, 가끔 완료
+                # 주행중이면 위치가 조금씩 이동, 가끔 목적지 도착(→idle).
+                #   (idle→driving 전환은 이제 mock 이 아니라 '배차기'가 한다 — 아래 FleetState.dispatch)
                 r.x += random.uniform(-0.1, 0.2)
                 r.y += random.uniform(-0.1, 0.2)
                 if random.random() < 0.08:
@@ -115,9 +126,45 @@ class FleetState:
                 "ros 소스는 P1+ 에서 구현 예정입니다 (지금은 config 의 source: mock 로 두세요)")
         self.source = MockFleetSource(self.robots)
 
+        # 작업 큐 (운영자가 GUI 에서 추가)
+        self.tasks: list[Task] = []
+        self._task_seq = 0
+
+    # ── 작업 생성 / 배차 ─────────────────────────────────────────────
+    def add_task(self, pickup: str, drop: str) -> None:
+        """운영자가 새 배송 작업을 큐에 추가(pending)."""
+        self._task_seq += 1
+        self.tasks.append(Task(id=self._task_seq, pickup=pickup, drop=drop))
+
+    def dispatch(self) -> None:
+        """대기(pending) 작업을 idle·배터리충분 로봇에 배차.
+        지금은 가장 단순 규칙: '첫 번째 여유 로봇'. (P3+ 에서 근접·배터리·혼잡 최적화)
+        """
+        for t in self.tasks:
+            if t.state != "pending":
+                continue
+            robot = next((r for r in self.robots
+                          if r.state == "idle" and r.battery > 20), None)
+            if robot is None:
+                break                       # 여유 로봇 없음 → 다음 틱에 다시
+            t.state, t.robot = "running", robot.id
+            robot.state, robot.task = "driving", f"{t.pickup}→{t.drop}"
+
+    def _complete_tasks(self) -> None:
+        """running 작업의 로봇이 idle 로 돌아오면(=목적지 도착) 작업 done 처리."""
+        for t in self.tasks:
+            if t.state == "running":
+                r = next((r for r in self.robots if r.id == t.robot), None)
+                if r is not None and r.state == "idle":
+                    t.state = "done"
+
     def refresh(self) -> None:
-        """한 사이클: 소스에서 최신 상태를 끌어온다(GUI 타이머가 호출)."""
-        self.source.poll()
+        """한 사이클(GUI 타이머가 호출):
+        1) 소스에서 로봇 상태 갱신 → 2) 대기작업 배차 → 3) 완료작업 정리.
+        """
+        self.source.poll()       # 배터리·주행 진행 등
+        self.dispatch()          # pending → 로봇 할당
+        self._complete_tasks()   # 도착한 로봇의 작업 done
 
     @property
     def summary(self) -> dict:

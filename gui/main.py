@@ -16,7 +16,7 @@ import os
 from nicegui import ui
 
 from gui.state import FleetState
-from gui.ui import dashboard
+from gui.ui import dashboard, tasks
 
 # config.yaml 경로 (이 파일과 같은 폴더)
 CFG_PATH = os.path.join(os.path.dirname(__file__), "config.yaml")
@@ -30,7 +30,11 @@ def index() -> None:
     """관제 대시보드 페이지."""
     ui.label("FMS — TurtleBot Fleet 관제").classes("text-2xl font-bold m-2")
 
-    # 이 영역만 주기적으로 다시 그린다(refreshable) → 전체 페이지 리로드 없음.
+    # 작업 생성 폼: 페이지에서 '한 번만' 렌더 (자동갱신 영역 밖 — 안 그러면
+    #   매 틱 select 값이 리셋됨. tasks.py 상단 공부포인트 참고).
+    tasks.create_form(state)
+
+    # 아래 영역만 주기적으로 다시 그린다(refreshable) → 전체 페이지 리로드 없음.
     @ui.refreshable
     def dash() -> None:
         dashboard.dashboard_body(state)
