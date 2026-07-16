@@ -120,11 +120,14 @@ class FleetState:
         self.stations = self.cfg.get("stations", [])
         self.source_name = self.cfg.get("source", "mock")
 
-        # 3) 소스 선택 — 지금은 mock 만. ros 는 P1+ 구현 후 분기.
+        # 3) 소스 선택
         if self.source_name == "ros":
-            raise NotImplementedError(
-                "ros 소스는 P1+ 에서 구현 예정입니다 (지금은 config 의 source: mock 로 두세요)")
-        self.source = MockFleetSource(self.robots)
+            # rclpy 는 여기서만 lazy import (mock 실행은 rclpy 없이도 되게).
+            #   ⚠ ros 는 ROS2 환경(집 머신)에서만 동작 — 이 개발머신엔 rclpy 없음.
+            from gui.ros_source import RosFleetSource
+            self.source = RosFleetSource(self.robots)
+        else:
+            self.source = MockFleetSource(self.robots)
 
         # 작업 큐 (운영자가 GUI 에서 추가)
         self.tasks: list[Task] = []
@@ -135,6 +138,19 @@ class FleetState:
         """운영자가 새 배송 작업을 큐에 추가(pending)."""
         self._task_seq += 1
         self.tasks.append(Task(id=self._task_seq, pickup=pickup, drop=drop))
+
+    def send_goal(self, robot_id: str, x: float, y: float, yaw: float = 0.0) -> None:
+        """로봇 N 을 (x,y) 로 보낸다 = 마스터 모델 "1번 로봇 A로 가라".
+        - ros 소스면 실제 nav2 목표 전송(RosFleetSource.send_goal)
+        - mock 이면 화면 상태만 driving 으로 (실제 이동은 안 함)
+        (P3+ 에서 '로봇별 목적지 지정' UI 가 이 함수를 호출한다.)
+        """
+        r = next((rr for rr in self.robots if rr.id == robot_id), None)
+        if r is None:
+            return
+        r.state, r.task = "driving", f"→({x:.1f},{y:.1f})"
+        if hasattr(self.source, "send_goal"):     # ros 소스만 실제 전송
+            self.source.send_goal(robot_id, x, y, yaw)
 
     def dispatch(self) -> None:
         """대기(pending) 작업을 idle·배터리충분 로봇에 배차.
