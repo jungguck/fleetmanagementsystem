@@ -14,6 +14,7 @@
 """
 from __future__ import annotations
 
+import math
 import random
 from dataclasses import dataclass
 
@@ -35,6 +36,8 @@ class RobotState:
     x: float = 0.0          # 맵 좌표 (odom/amcl pose)
     y: float = 0.0
     yaw: float = 0.0        # 방향 (rad)
+    tx: float | None = None # 목표 좌표(mock 이동용). None = 목표 없음
+    ty: float | None = None
 
 
 # ─────────────────────────────────────────────────────────────────────
@@ -83,12 +86,24 @@ class MockFleetSource:
                 if r.battery > 95:
                     r.state, r.task = "idle", "-"
             elif r.state == "driving":
-                # 주행중이면 위치가 조금씩 이동, 가끔 목적지 도착(→idle).
-                #   (idle→driving 전환은 이제 mock 이 아니라 '배차기'가 한다 — 아래 FleetState.dispatch)
-                r.x += random.uniform(-0.1, 0.2)
-                r.y += random.uniform(-0.1, 0.2)
-                if random.random() < 0.08:
-                    r.state, r.task = "idle", "-"
+                # 주행중: 목표(tx,ty)가 있으면 그쪽으로 한 스텝씩, 없으면 랜덤 표류.
+                #   (idle→driving 전환은 mock 이 아니라 send_goal/배차기가 한다)
+                if r.tx is not None and r.ty is not None:
+                    dx, dy = r.tx - r.x, r.ty - r.y
+                    dist = math.hypot(dx, dy)
+                    if dist < 0.15:                       # 도착
+                        r.x, r.y = r.tx, r.ty
+                        r.state, r.task, r.tx, r.ty = "idle", "-", None, None
+                    else:
+                        step = min(0.2, dist)             # 한 틱 이동량
+                        r.x += step * dx / dist
+                        r.y += step * dy / dist
+                        r.yaw = math.atan2(dy, dx)        # 진행 방향으로 회전
+                else:
+                    r.x += random.uniform(-0.1, 0.2)
+                    r.y += random.uniform(-0.1, 0.2)
+                    if random.random() < 0.08:
+                        r.state, r.task = "idle", "-"
 
 
 # (예정) RosFleetSource — rclpy 노드로 실제 ROS2 상태 구독.
@@ -149,8 +164,15 @@ class FleetState:
         if r is None:
             return
         r.state, r.task = "driving", f"→({x:.1f},{y:.1f})"
-        if hasattr(self.source, "send_goal"):     # ros 소스만 실제 전송
+        r.tx, r.ty = x, y                          # mock 이동 목표(ros 는 nav2 가 실이동)
+        if hasattr(self.source, "send_goal"):      # ros 소스만 실제 전송
             self.source.send_goal(robot_id, x, y, yaw)
+
+    def send_to_station(self, robot_id: str, station_name: str) -> None:
+        """로봇을 '스테이션 이름'으로 보낸다(UI 편의). 이름→좌표 찾아 send_goal."""
+        st = next((s for s in self.stations if s["name"] == station_name), None)
+        if st is not None:
+            self.send_goal(robot_id, float(st["x"]), float(st["y"]))
 
     def dispatch(self) -> None:
         """대기(pending) 작업을 idle·배터리충분 로봇에 배차.

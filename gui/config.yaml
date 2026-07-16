@@ -7,9 +7,11 @@
 # 화면 갱신 주기(초). plc_study 의 poll_interval_sec 과 동일 개념.
 poll_interval_sec: 0.5
 
-# 데이터 소스:
-#   mock = ROS 없이 가짜 데이터로 GUI 단독 실행(지금 이 골격의 기본)
-#   ros  = 실제 ROS2 브릿지(rclpy)로 /tbN 상태 구독 — P1+ 에서 구현(state.py TODO)
+# 데이터 소스 (plc_study 의 mock/real 모드와 같은 개념):
+#   mock = ROS 없이 가짜 데이터 — '이 개발머신(ROS/Gazebo 없음)에서 GUI 골격만 볼 때'.
+#   ros  = 실제 ROS2 구독 + nav2 명령. ★ Gazebo 시뮬레이션이든 실 TurtleBot이든 '이거'.
+#          (Gazebo TurtleBot 도 실 로봇과 똑같이 /tbN/odom·nav2 를 내보냄 → '시뮬 = ros')
+# → 집에서 Gazebo 시뮬 돌릴 땐 'ros' 로 바꾼다. mock 은 ROS 없는 지금 머신용 개발 편의.
 source: mock
 
 # 관제할 로봇(=지게차) 목록. 대수 늘리려면 항목만 추가하면 됨(코드 무관).
