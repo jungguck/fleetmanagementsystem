@@ -1,3 +1,6 @@
-# FMS 관제 GUI 의존성 (집 머신에서: pip install -r requirements.txt)
+# FMS 관제 GUI 의존성
+#   ⚠ python3.12 venv 에 설치할 것 (rclpy 가 3.12 용 — docs/환경.md §1 참고).
+#     ./run.sh 가 알아서 venv 만들고 여기 있는 걸 설치한다.
+#   rclpy·turtlesim 은 여기 없다 — apt 로 깔린 ROS(/opt/ros/jazzy)를 source 해서 쓴다.
 nicegui
 pyyaml

@@ -18,7 +18,8 @@ from nicegui import ui
 from gui.state import FleetState
 
 # 작업 상태 색
-_TASK_STATE_COLOR = {"pending": "#9aa7b0", "running": "#2e86de", "done": "#27ae60"}
+_TASK_STATE_COLOR = {"pending": "#9aa7b0", "running": "#2e86de",
+                     "done": "#27ae60", "cancelled": "#e74c3c"}
 
 
 def create_form(state: FleetState) -> None:

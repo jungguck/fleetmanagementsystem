@@ -5,3 +5,6 @@ __pycache__/
 build/
 install/
 log/
+
+# python venv (rclpy+nicegui 통합 실행용)
+.venv/
