@@ -150,6 +150,8 @@ class FleetState:
             )
             for i, r in enumerate(self.cfg.get("robots", []))
         ]
+        # 맵 클릭 이동 명령의 '대상 로봇'. 조작 패널의 토글로 바꾼다(기본=첫 로봇).
+        self.selected_id: str | None = self.robots[0].id if self.robots else None
         self.stations = self.cfg.get("stations", [])
 
         # 맵: 월드 범위 + 벽(가상 진입금지 구역). 맵뷰·플래너가 공유(단일 정의처).
@@ -165,6 +167,14 @@ class FleetState:
         # 3) 백엔드 선택 — turtlesim(실 ROS) / sim2d(폴백).
         #    turtlesim 은 rclpy 가 필요해서 '고를 때만' import 한다
         #    (ROS 안 깔린 환경에서도 sim2d 로 UI 가 뜨게).
+        #
+        # [관찰 2026-07-19] '시각화' 목적만 보면 turtlesim 창은 사실 없어도 된다.
+        #   웹 맵뷰(ui/mapview.py)가 이미 로봇 위치·궤적·A* 경로·스테이션·벽을 다 그리므로,
+        #   sim2d 만으로 관제 로직과 화면 시연이 전부 가능하다(이번 윈도우 실행이 그 증거).
+        #   turtlesim 이 의미 있는 경우는 딱 두 가지:
+        #     (a) 실제 ROS 2 토픽(/turtleN/cmd_vel, /pose) 연동이 제대로 되는지 검증할 때,
+        #     (b) 별도 turtlesim 창의 실시간 렌더가 따로 필요할 때.
+        #   그 외 '관제 두뇌'를 만들고 보여주는 목적에는 sim2d 로 충분하다.
         if self.source_name == "turtlesim":
             from gui.turtlesim_source import TurtlesimSource
             self.source = TurtlesimSource(self.robots, self.cfg)

@@ -24,7 +24,7 @@ import os
 from nicegui import app, ui
 
 from gui.state import FleetState
-from gui.ui import control, dashboard, tasks
+from gui.ui import control, dashboard, mapview, tasks
 
 # config.yaml 경로 (이 파일과 같은 폴더)
 CFG_PATH = os.path.join(os.path.dirname(__file__), "config.yaml")
@@ -47,26 +47,65 @@ app.timer(state.poll_interval, state.refresh)
 
 @ui.page("/")
 def index() -> None:
-    """관제 대시보드 페이지."""
-    ui.label("FMS — turtlesim Fleet 관제").classes("text-2xl font-bold m-2")
+    """관제 대시보드 페이지 — 한 화면(스크롤 최소): 왼쪽 맵(고정) + 오른쪽 탭."""
+    # 화면 높이를 꽉 채우고 페이지 자체 스크롤을 없앤다(정보를 한 화면에).
+    ui.query(".nicegui-content").classes("h-screen w-full p-2 gap-2 flex flex-col")
 
-    # 로봇 조작(목적지 지정 + 수동 teleop) — 한 번만 렌더(자동갱신 밖).
-    control.control_panel(state)
+    ui.label("FMS — turtlesim Fleet 관제").classes("text-lg font-bold")
 
-    # (대안) 자동배차 작업 생성 폼 — A→B 만들면 시스템이 로봇을 고름.
-    #   폼이라 역시 '한 번만' 렌더(자동갱신 영역 밖. tasks.py 상단 공부포인트 참고).
-    tasks.create_form(state)
-
-    # 아래 영역만 주기적으로 다시 그린다(refreshable) → 전체 페이지 리로드 없음.
+    # ── 상단 요약 바(가벼움 → refreshable) ──
     @ui.refreshable
-    def dash() -> None:
-        dashboard.dashboard_body(state)
+    def summary() -> None:
+        dashboard.summary_bar(state)
+    summary()
 
-    dash()
+    # ── 본문: 왼쪽 맵(고정) + 오른쪽 탭(로봇/조작/작업) ──
+    with ui.row().classes("w-full flex-1 gap-3 items-stretch min-h-0"):
+        # 왼쪽 맵: '한 번만' 생성(고정) → 이후 render_map 이 내용만 갱신(깜빡임 없음).
+        with ui.column().classes("gap-1"):
+            # 맵 클릭 대상 로봇 선택 — 맵 바로 위에 항상 노출(탭 이동 없이 전환).
+            #   여기서 고른 로봇이 맵 클릭 지점으로 이동한다(맵에 흰 점선 링으로 표시).
+            #   index() 는 한 번만 실행 → 이 토글은 재생성 안 됨 → 선택값 유지.
+            with ui.row().classes("items-center gap-2"):
+                ui.label("🖱 클릭 대상:").classes("text-sm font-bold")
+                ui.toggle({r.id: r.name for r in state.robots}, value=state.selected_id,
+                          on_change=lambda e: setattr(state, "selected_id", e.value)
+                          ).props("dense")
+            map_img = mapview.create_map(state)
+            ui.label("🐢거북이 · 실선=궤적 · 점선=A*경로 · ▣스테이션 · "
+                     "흐린사각=가상벽 · 🔴충돌위험 · 🟠양보").classes(
+                "text-xs").style("color:#9aa7b0; max-width:520px")
 
-    # 이 타이머는 '이 브라우저의 화면만' 다시 그린다(관제 로직은 위 app.timer 가 담당).
-    #   ※ 로봇 제어(cmd_vel)는 둘 다 아니고 ROS 스레드가 20Hz 로 돌린다.
-    ui.timer(state.poll_interval, dash.refresh)
+        # 오른쪽: 탭으로 정보 분리 → 세로 스크롤 최소화.
+        with ui.column().classes("flex-1 min-w-0"):
+            with ui.tabs().classes("w-full") as tabs:
+                ui.tab("로봇")
+                ui.tab("조작")
+                ui.tab("작업")
+            with ui.tab_panels(tabs, value="로봇").classes(
+                    "w-full flex-1 min-h-0").style("overflow:auto"):
+                with ui.tab_panel("로봇"):        # 로봇 상태 카드
+                    @ui.refreshable
+                    def cards() -> None:
+                        dashboard.robot_cards(state)
+                    cards()
+                with ui.tab_panel("조작"):        # 조작 패널 — 한 번만(폼/토글 리셋 방지)
+                    control.control_panel(state)
+                with ui.tab_panel("작업"):        # 작업 생성(한 번만) + 큐(갱신)
+                    tasks.create_form(state)
+                    @ui.refreshable
+                    def queue() -> None:
+                        tasks.task_queue(state)
+                    queue()
+
+    # ── 화면 갱신 틱: 맵은 '내용만' 교체, 나머지는 refresh ──
+    #   관제 로직(배차·충전)은 위 app.timer(state.refresh) 담당. 여기선 그리기만.
+    def tick() -> None:
+        mapview.render_map(state, map_img)   # 요소 재생성 X → 깜빡임 없음
+        summary.refresh()
+        cards.refresh()
+        queue.refresh()
+    ui.timer(state.poll_interval, tick)
 
 
 if __name__ in {"__main__", "__mp_main__"}:

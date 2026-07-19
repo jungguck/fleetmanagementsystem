@@ -49,6 +49,7 @@ def control_panel(state: FleetState) -> None:
 
         ui.label("목적지 [이동]=자동주행(A* 경로) · ▲◀▶▼=수동(cmd_vel 직발행, 1초씩)").classes(
             "text-xs").style("color:#9aa7b0")
+        # (맵 클릭 대상 로봇 선택기는 맵 바로 위로 옮김 — main.py index() 참고)
 
         for r in state.robots:
             with ui.row().classes("items-center gap-2"):

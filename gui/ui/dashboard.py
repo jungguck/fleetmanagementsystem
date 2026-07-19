@@ -10,8 +10,6 @@ from nicegui import ui
 
 from gui.models import LOW_BATT, STATE_COLORS, STATE_LABELS, RobotState
 from gui.state import FleetState
-from gui.ui import mapview   # 좌측 맵뷰(로봇 위치·스테이션)
-from gui.ui import tasks     # 하단 작업 큐
 
 
 def robot_card(r: RobotState) -> None:
@@ -42,37 +40,33 @@ def robot_card(r: RobotState) -> None:
             ui.label("⚠ OFFLINE — /pose 없음").classes("text-xs").style("color:#e74c3c")
 
 
-def dashboard_body(state: FleetState) -> None:
-    """대시보드 본문: 상단 요약 줄 + 로봇 카드 그리드.
+def _chip(label: str, value, color: str) -> None:
+    """요약용 상태 칩(알약). 색으로 종류를 구분해 한눈에 스캔되게."""
+    with ui.element("div").style(
+            f"display:flex;gap:6px;align-items:center;padding:2px 10px;"
+            f"border-radius:999px;background:{color}1a;border:1px solid {color}55"):
+        ui.label(label).classes("text-xs").style(f"color:{color}")
+        ui.label(str(value)).classes("text-sm font-bold").style(
+            f"color:{color};font-variant-numeric:tabular-nums")
 
-    로봇 상태는 snapshot() 사본으로 한 번만 떠서 맵뷰·카드가 **같은 순간**을 그린다
-    (매번 살아있는 값을 읽으면 맵과 카드가 서로 다른 틱을 보여줄 수 있고,
-     ROS 스레드와 경합해 터진다 — FleetState.snapshot() 주석 참고).
-    """
-    robots = state.snapshot()
+
+def summary_bar(state: FleetState) -> None:
+    """상단 요약 바 — 텍스트 한 줄 대신 색 칩으로(한눈에 파악)."""
     s = state.summary
+    with ui.row().classes("items-center gap-2 w-full flex-wrap"):
+        ui.label("🐢 Fleet").classes("text-base font-bold")
+        _chip("가동", f"{s['online']}/{s['total']}", "#2e86de")
+        _chip("주행", s["driving"], "#27ae60")
+        _chip("양보", s["waiting"], "#e67e22")
+        _chip("수동", s["manual"], "#8e44ad")
+        _chip("충전", s["charging"], "#16a085")
+        _chip("에러", s["error"], "#e74c3c")
+        ui.space()
+        ui.label(f"백엔드: {state.source_name}").classes("text-xs").style("color:#9aa7b0")
 
-    # ── 상단 요약 ──
-    ui.label(
-        f"🐢 Fleet 관제  —  가동 {s['online']}/{s['total']}  ·  "
-        f"주행 {s['driving']}  ·  ⚠양보대기 {s['waiting']}  ·  수동 {s['manual']}  ·  "
-        f"충전 {s['charging']}  ·  에러 {s['error']}  ·  백엔드: {state.source_name}"
-    ).classes("text-lg font-bold mb-2")
 
-    # ── 본문: 왼쪽 맵뷰 + 오른쪽 로봇 카드 (GUI_설계.md 배치) ──
-    with ui.row().classes("w-full gap-4 items-start"):
-        # 왼쪽: 웹에 그린 turtlesim 화면(거북이·궤적) + 관제 오버레이(경로·스테이션·벽)
-        with ui.column().classes("gap-1"):
-            mapview.map_view(state, robots)
-            ui.label("🐢거북이(색=펜) · 실선=지나온 궤적 · 점선=A* 계획경로 · "
-                     "▣스테이션 · 흐린사각=가상벽(진입금지) · "
-                     "🔴빨간점선=충돌위험 · 🟠주황원=양보대기(안전거리)").classes(
-                "text-xs").style("color:#9aa7b0; max-width:520px")
-        # 오른쪽: 로봇 카드 그리드 (대수만큼 순회 — plc_study for r in snap.robots 패턴)
-        with ui.column().classes("flex-1"):
-            with ui.row().classes("flex-wrap gap-3"):
-                for r in robots:
-                    robot_card(r)
-
-    # ── 하단: 작업 큐 현황 (생성 폼은 페이지에서 별도 렌더 — tasks.py 공부포인트 참고) ──
-    tasks.task_queue(state)
+def robot_cards(state: FleetState) -> None:
+    """로봇 상태 카드 그리드. snapshot() 사본으로 같은 순간을 그린다(경합 방지)."""
+    with ui.row().classes("w-full flex-wrap gap-3"):
+        for r in state.snapshot():
+            robot_card(r)

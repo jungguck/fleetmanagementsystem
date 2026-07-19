@@ -10,7 +10,12 @@ poll_interval_sec: 0.5
 # 백엔드:
 #   turtlesim = 실제 ROS 2 turtlesim (메인). turtlesim_node 가 떠 있어야 한다.
 #   sim2d     = ROS 없이 도는 2D 시뮬(폴백). ROS 없는 PC 에서 UI 만 볼 때.
-source: turtlesim
+# ─────────────────────────────────────────────────────────────────────
+# [2026-07-19 윈도우 테스트] rclpy(ROS)는 윈도우에서 안 돌아가므로 sim2d 로 실행.
+#   sim2d 는 rclpy 를 import 하지 않는다(state.py 의 if source=="turtlesim" 안에서만 import).
+#   → 웹 대시보드에서 로봇 4대가 A* 경로 따라 움직이고, 배차·충전·교통관제 전부 동작.
+#   리눅스+ROS 환경으로 옮기면 이 값을 다시 turtlesim 으로 바꾸면 된다.
+source: sim2d
 
 # 관제할 로봇(=거북이) 목록. 대수 늘리려면 항목만 추가하면 됨(코드 무관).
 #   id    = turtlesim 거북이 이름 = ROS 네임스페이스 (/turtle1/cmd_vel, /turtle1/pose)

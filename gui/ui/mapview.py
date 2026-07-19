@@ -39,12 +39,19 @@ from gui.state import FleetState
 # 화면 크기(px). turtlesim 창처럼 정사각(월드가 11.09 x 11.09 정사각이므로).
 _W, _H = 520, 520
 
+# 클릭 좌표를 받기 위한 '빈 배경'(520x520). interactive_image 의 좌표계를 이 크기로 고정한다.
+#   (실제 그림은 content SVG 가 다 그린다. 이 소스는 좌표 기준용 투명 SVG 일 뿐.)
+#   %3C=< %3E=> %2F=/ %22=" %3D== %20=공백 (data URI 라 URL 인코딩)
+_BLANK_SRC = ('data:image/svg+xml;charset=utf-8,'
+              '%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22'
+              '%20width%3D%22520%22%20height%3D%22520%22%2F%3E')
+
 # 스테이션 종류별 색
 _STATION_COLOR = {"pickup": "#f39c12", "drop": "#8e44ad", "charge": "#27ae60"}
 
 
-def map_view(state: FleetState, robots: list[RobotState]) -> None:
-    """turtlesim 화면(배경·거북이·궤적) + 관제 오버레이(경로·스테이션·벽).
+def _build_svg(state: FleetState, robots: list[RobotState]) -> str:
+    """맵 SVG '문자열'만 만든다(요소 생성 X). create_map/render_map 이 이걸 쓴다.
 
     robots 는 `FleetState.snapshot()` 이 준 **사본**이어야 한다(살아있는 RobotState 금지).
     ROS 스레드가 20Hz 로 path/trail 을 바꾸는 중에 그리면 터진다 — snapshot() 주석 참고.
@@ -131,12 +138,60 @@ def map_view(state: FleetState, robots: list[RobotState]) -> None:
             f'fill="#e67e22" fill-opacity="0.12" stroke="#e67e22" '
             f'stroke-dasharray="3 3" stroke-width="1.5"/>')
 
-    # ── ⑦ 거북이 ──
+    # ── ⑦ 거북이 (+ '맵 클릭 명령 대상' 로봇 하이라이트) ──
     for r in robots:
-        parts.append(_turtle_svg(r, *to_screen(r.x, r.y)))
+        px, py = to_screen(r.x, r.y)
+        if r.id == state.selected_id:                 # 클릭 명령 대상 → 흰 점선 링으로 표시
+            parts.append(
+                f'<circle cx="{px:.1f}" cy="{py:.1f}" r="18" fill="none" '
+                f'stroke="#ffffff" stroke-width="2" stroke-dasharray="3 3" opacity="0.9"/>')
+        parts.append(_turtle_svg(r, px, py))
 
-    ui.html(f'<svg width="{_W}" height="{_H}" style="border-radius:6px">'
-            f'{"".join(parts)}</svg>')
+    return "".join(parts)
+
+
+def create_map(state: FleetState):
+    """맵을 '한 번만' 만든다(고정 요소). 반환한 img 를 render_map 으로 갱신한다.
+
+    ⚠ 깜빡임 방지 핵심: 예전엔 매 0.5초 dash.refresh 가 이 요소를 통째로 재생성해서
+    <img> 가 매번 새로 로드 → 깜빡였다. 이제 요소는 그대로 두고 render_map 이
+    content(SVG 문자열)만 교체한다 → 재생성 없음 → 깜빡임 없음.
+
+    클릭: ui.interactive_image 는 클릭 시 e.image_x/image_y(이미지 좌표 0~520)를 준다.
+    _on_map_click 에서 월드 좌표(0~11.09)로 역변환해 send_goal 한다.
+    """
+    return ui.interactive_image(
+        _BLANK_SRC, content=_build_svg(state, state.snapshot()), size=(_W, _H),
+        on_mouse=lambda e: _on_map_click(state, e),
+        events=["mousedown"], cross=True,
+        sanitize=False,          # content 는 서버가 만든 신뢰된 SVG → 정제로 도형 안 깎이게
+    ).style("border-radius:6px; cursor:crosshair")
+
+
+def render_map(state: FleetState, img) -> None:
+    """매 틱 호출: 요소는 그대로, SVG 내용만 교체(재생성 X → 깜빡임 없음)."""
+    img.set_content(_build_svg(state, state.snapshot()))
+
+
+def _on_map_click(state: FleetState, e) -> None:
+    """맵 클릭 → 클릭 지점(월드 좌표)으로 '명령 대상 로봇'을 A* 주행시킨다.
+    실패하면 '왜' 안 갔는지 알린다(조용히 무시하면 고장으로 보인다)."""
+    xmin, ymin, xmax, ymax = state.world
+    # 역변환: 픽셀(0~520) → 월드(0~11.09). 화면 y 는 뒤집혀 있으니 (H - image_y).
+    wx = xmin + (e.image_x / _W) * (xmax - xmin)
+    wy = ymin + ((_H - e.image_y) / _H) * (ymax - ymin)
+    rid = state.selected_id
+    if not rid:
+        ui.notify("먼저 조작 패널에서 '맵 클릭 대상' 로봇을 고르세요",
+                  type="warning", position="top")
+        return
+    if state.send_goal(rid, wx, wy, label=f"→맵({wx:.1f},{wy:.1f})"):
+        ui.notify(f"{rid} → ({wx:.1f}, {wy:.1f})", type="positive", position="top")
+    elif state.estopped:
+        ui.notify("E-STOP 상태입니다 — [해제] 후 조작하세요", type="warning", position="top")
+    else:
+        ui.notify("그 지점으로 가는 경로가 없습니다 (벽/도달 불가)",
+                  type="negative", position="top")
 
 
 def _turtle_svg(r: RobotState, px: float, py: float) -> str:
