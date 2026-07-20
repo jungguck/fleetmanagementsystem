@@ -380,9 +380,40 @@ class FleetState:
           20Hz 제어루프가 멈춰 로봇이 끊긴다. 각 메서드가 '바꿀 때만' 짧게 잡는다.
         """
         self.source.poll()
+        self._avoid_headon()        # 정면대향 양보 로봇 → 우회 재계획(서지 말고 피해가게)
         self._advance_tasks()
         self._auto_charge()
         self.dispatch()
+
+    def _avoid_headon(self) -> None:
+        """정면대향 양보 로봇을 '서는' 대신 상대를 피해 우회(A* 재계획)시킨다.
+
+        traffic.headon_yielders 로 [정면대향 양보 로봇 → 상대 위치] 를 받아, 그 상대를 임시
+        장애물로 넣고 현재위치→최종목표(r.path[-1]) 로 재계획한다. 우회로가 있으면 교체,
+        없으면(막다른 길·좁은 통로) 손대지 않음 → 기존 양보(정지)로 폴백.
+
+        ⚠ A* 는 락 '밖'에서 계산하고 r.path 대입만 락 안에서 한다(20Hz 제어루프와 경합 방지).
+        """
+        pairs = traffic.headon_yielders(self.robots, self.safe_dist)
+        for rid, blocker_pos in pairs.items():
+            r = self._robot(rid)
+            if r is None or r.state not in ("driving", "waiting") or not r.path:
+                continue
+            goal = r.path[-1]                       # 최종 목표(플래너가 마지막에 붙인 실제 목표)
+            # ★핵심: 상대의 '현재 위치'만 막으면 경로가 상대를 향해 직진하다 코앞에서야 꺾여
+            #   이미 충돌한다. 둘이 마주 달려 '만날 지점'(중간점)까지 함께 막아 진입 통로를
+            #   넓게(≈safe_dist) 봉쇄 → 로봇이 일찍 옆으로 크게 돌아간다. 매 틱 재계획해
+            #   상대가 움직여도 우회로가 따라 갱신된다(커밋해두면 낡은 경로에 갇힘).
+            mid = ((r.x + blocker_pos[0]) / 2.0, (r.y + blocker_pos[1]) / 2.0)  # 예상 만남 지점
+            new_path = self.planner.plan((r.x, r.y), goal,
+                                         avoid=[blocker_pos, mid], avoid_radius=self.safe_dist)
+            if len(new_path) < 2:                   # 우회로 없음(막다른 길·좁은 통로) → 기존 양보(정지)
+                continue
+            with FLEET_LOCK:
+                if r.state in ("driving", "waiting") and r.path:   # 락 밖 계산 사이 상태변화 재확인
+                    r.path = new_path
+                    r.state = "driving"             # 서지 말고 우회 진행
+                    r.task = (r.task or "").replace(" ⟲우회", "") + " ⟲우회"
 
     def snapshot(self) -> list[RobotState]:
         """화면용 읽기 전용 사본.

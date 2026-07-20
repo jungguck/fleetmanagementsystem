@@ -87,10 +87,32 @@ class GridPlanner:
 
     # ── A* : (x,y) 시작 → (x,y) 목표 → 월드 웨이포인트 리스트 ──
     def plan(self, start: tuple[float, float],
-             goal: tuple[float, float]) -> list[tuple[float, float]]:
+             goal: tuple[float, float],
+             avoid: list[tuple[float, float]] | None = None,
+             avoid_radius: float = 0.55
+             ) -> list[tuple[float, float]]:
         """경로 웨이포인트. **경로가 없으면 빈 리스트** — 호출자가 목표를 거부해야 한다.
         (예전엔 직선 폴백을 돌려줬는데, 그러면 '벽을 뚫고 가는 경로'를 정상 경로인 척
-         내주게 된다. 못 가면 못 간다고 말하는 게 맞다.)"""
+         내주게 된다. 못 가면 못 간다고 말하는 게 맞다.)
+
+        avoid: 임시 동적 장애물(다른 로봇 등)의 월드 좌표 [(x,y),…]. 그 주변 셀을 이 호출
+          동안만 막아 '피해가는' 경로를 만든다(정적 self.blocked 는 안 건드림 → 다음 호출엔 무효).
+          정면대향(head-on) 교통관제 우회에 쓴다.
+        """
+        # 동적 장애물 → 이 호출에서만 막을 셀 집합(정적 벽과 별개, self.blocked 불변).
+        dyn: set[tuple[int, int]] = set()
+        if avoid:
+            rad = max(2, int(round(avoid_radius / self.res)))   # 로봇 회피 반경(셀)
+            for (ax, ay) in avoid:
+                ac, ar = self._cell(ax, ay)
+                for dr in range(-rad, rad + 1):
+                    for dc in range(-rad, rad + 1):
+                        if dc * dc + dr * dr <= rad * rad:  # 원형으로 막기
+                            dyn.add((ac + dc, ar + dr))
+
+        def free(c: int, r: int) -> bool:                  # 정적 벽 + 동적 장애물 둘 다 통과 가능해야 free
+            return self._free(c, r) and (c, r) not in dyn
+
         s = self._nearest_free(*self._cell(*start))
         g = self._nearest_free(*self._cell(*goal))
         # 목표가 벽 안이면 _nearest_free 가 바깥으로 스냅한다 → 마지막에 '진짜 목표'를
@@ -110,11 +132,11 @@ class GridPlanner:
             cc, cr = cur
             for dc, dr, cost in _NEI:
                 nc, nr = cc + dc, cr + dr
-                if not self._free(nc, nr):
+                if not free(nc, nr):
                     continue
                 # 대각선이 벽 모서리를 자르지 않게: 양옆 셀 하나라도 막히면 금지
-                if dc != 0 and dr != 0 and (not self._free(cc + dc, cr) or
-                                            not self._free(cc, cr + dr)):
+                if dc != 0 and dr != 0 and (not free(cc + dc, cr) or
+                                            not free(cc, cr + dr)):
                     continue
                 ng = gscore[cur] + cost
                 nxt = (nc, nr)

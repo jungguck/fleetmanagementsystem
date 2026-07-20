@@ -65,6 +65,31 @@ def yielders(robots: list[RobotState], safe_dist: float) -> set[str]:
     return out
 
 
+def headon_yielders(robots: list[RobotState], safe_dist: float,
+                    react_dist: float | None = None) -> dict[str, tuple[float, float]]:
+    """정면대향(head-on)으로 양보하는 로봇 → {yielder_id: (상대 x, 상대 y)}.
+
+    yielders() 는 '서라'만 시키는데, 정면대향(둘이 서로 마주 보고 다가옴)에선 양보 로봇이
+    서 봤자 상대 경로 위에 그대로 서 있어 상대가 못 지나간다(개발노트 §6 한계).
+    → 이 경우는 '서지 말고 상대를 피해 우회(재계획)'해야 한다. 그 대상을 골라낸다.
+
+    판정: safe_dist(기본 2배 react_dist 로 좀 더 일찍)안 + **둘 다 서로에게 다가가는 중**
+      이면 정면대향. (한쪽만 다가가는 교차/추월은 기존 yielders 의 단순 정지로 충분.)
+    반환 dict 의 값 = 우선순위 높은(안 서는) 상대 로봇의 현재 위치 → 재계획 시 임시 장애물.
+    """
+    react = react_dist if react_dist is not None else safe_dist * 3.0
+    out: dict[str, tuple[float, float]] = {}
+    active = [r for r in robots if r.state in _ON_ROAD and r.online]
+    for i, a in enumerate(active):
+        for b in active[i + 1:]:
+            if math.hypot(a.x - b.x, a.y - b.y) >= react:
+                continue
+            lo, hi = (a, b) if (a.prio, a.id) < (b.prio, b.id) else (b, a)  # hi=양보(우회)
+            if _approaching(hi, lo) and _approaching(lo, hi):   # 둘 다 다가감 = 정면대향
+                out[hi.id] = (lo.x, lo.y)
+    return out
+
+
 def conflicts(robots: list[RobotState], safe_dist: float) -> list[tuple[str, str]]:
     """safe_dist 안에 들어온 로봇 쌍 (맵뷰에 경고선으로 그리기 위함)."""
     out: list[tuple[str, str]] = []
