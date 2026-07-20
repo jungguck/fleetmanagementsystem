@@ -128,9 +128,14 @@ class GridPlanner:
             return []                        # 도달 불가 — 벽으로 완전히 갇힌 목표
 
         # 셀 경로 복원 → 월드 좌표
+        #   came[칸] 은 '그 칸의 직전 칸'(뒤를 가리키는 화살표)만 저장한다.
+        #   확실히 아는 건 '목표(g)에 닿았다'는 것뿐이라, g 부터 came 를 계속 따라가
+        #   시작(s)까지 되짚는다. 그래서 목록은 [목표 … 시작] 순(거꾸로)으로 만들어진다.
+        #   ('다음 칸'은 목표에 닿기 전엔 알 수 없어서 앞으로는 못 쌓는다.)
         cells = [g]
         while cells[-1] != s:
             cells.append(came[cells[-1]])
+        # 로봇은 시작→목표로 가야 하므로 뒤집어 [시작 … 목표] 순으로 바꾼다.
         cells.reverse()
         pts = [self._center(c, r) for (c, r) in cells]
         pts = self._simplify(pts)
